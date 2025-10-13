@@ -58,6 +58,10 @@ func main() {
 
 	for i := 0; i < *n; i++ {
 		mux := http.NewServeMux()
+		mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte("This is a fake webserver to generate metrics data. Please use the /metrics endpoint to get the metrics data."))
+		}))
 		mux.Handle("/debug/pprof/", http.HandlerFunc(pprof.Index))
 		mux.Handle("/debug/pprof/cmdline", http.HandlerFunc(pprof.Cmdline))
 		mux.Handle("/debug/pprof/profile", http.HandlerFunc(pprof.Profile))
