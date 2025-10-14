@@ -17,13 +17,13 @@ spec:
     spec:
       containers:
         - name: fake-webserver
-          image: coldstar/fake-webserver:latest
+          image: coldstar/fake-webserver:v2
           ports:
             - containerPort: 8080
           resources:
-            requests:
+            # requests:
               # cpu: "1"
-              memory: "16Mi"
+              # memory: "16Mi"
             # limits:
               # cpu: "1"
               # memory: "16Mi"

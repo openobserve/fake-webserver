@@ -15,7 +15,9 @@ package main
 
 import (
 	"flag"
+	"fmt"
 	"math"
+	"math/rand"
 	"time"
 )
 
@@ -26,55 +28,39 @@ func runClient() {
 		return 2 + math.Sin(math.Sin(2*math.Pi*float64(time.Since(start))/float64(*oscillationPeriod)))
 	}
 
-	// GET /api/foo.
-	go func() {
-		for {
-			handleAPI("GET", "/api/foo")
-			time.Sleep(time.Duration(3*oscillationFactor()) * time.Millisecond)
+	// Generate dynamic endpoints, regions, and versions
+	endpoints := generateEndpoints(*numEndpoints)
+	regions := generateRegions(*numRegions)
+	versions := generateVersions(*numVersions)
+
+	fmt.Printf("Starting load generation with:\n")
+	fmt.Printf("  - %d API endpoints\n", len(endpoints))
+	fmt.Printf("  - %d regions\n", len(regions))
+	fmt.Printf("  - %d versions\n", len(versions))
+	fmt.Printf("  - Estimated unique time series: ~%d\n", len(endpoints)*2*len(regions)*len(versions)*3) // methods * labels * statuses
+
+	// Generate load for each endpoint with different regions and versions
+	for path := range endpoints {
+		for _, method := range []string{"GET", "POST"} {
+			// Create a copy for the closure
+			currentPath := path
+			currentMethod := method
+
+			go func() {
+				for {
+					// Randomly select region and version to create diverse series
+					region := regions[rand.Intn(len(regions))]
+					version := versions[rand.Intn(len(versions))]
+
+					handleAPI(currentMethod, currentPath, region, version)
+
+					// Variable sleep time based on oscillation
+					sleepTime := time.Duration(float64(5+rand.Intn(50)) * oscillationFactor())
+					time.Sleep(sleepTime * time.Millisecond)
+				}
+			}()
 		}
-	}()
-	// POST /api/foo.
-	go func() {
-		for {
-			handleAPI("POST", "/api/foo")
-			time.Sleep(time.Duration(25*oscillationFactor()) * time.Millisecond)
-		}
-	}()
-	// GET /api/bar.
-	go func() {
-		for {
-			handleAPI("GET", "/api/bar")
-			time.Sleep(time.Duration(10*oscillationFactor()) * time.Millisecond)
-		}
-	}()
-	// POST /api/bar.
-	go func() {
-		for {
-			handleAPI("POST", "/api/bar")
-			time.Sleep(time.Duration(5*oscillationFactor()) * time.Millisecond)
-		}
-	}()
-	// GET /api/baz.
-	go func() {
-		for {
-			handleAPI("POST", "/api/baz")
-			time.Sleep(time.Duration(70*oscillationFactor()) * time.Millisecond)
-		}
-	}()
-	// GET /api/boom.
-	go func() {
-		for {
-			handleAPI("GET", "/api/boom")
-			time.Sleep(time.Duration(80*oscillationFactor()) * time.Millisecond)
-		}
-	}()
-	// GET /api/nonexistent.
-	go func() {
-		for {
-			handleAPI("POST", "/api/boom")
-			time.Sleep(time.Duration(90*oscillationFactor()) * time.Millisecond)
-		}
-	}()
+	}
 
 	select {}
 }

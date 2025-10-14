@@ -37,15 +37,17 @@ var (
 			Help:      "A histogram of the API HTTP request durations in seconds.",
 			Buckets:   prometheus.ExponentialBuckets(0.0001, 1.5, 25),
 		},
-		[]string{"method", "path", "status"},
+		[]string{"method", "path", "status", "region", "version"},
 	)
-	requestsInProgress = prometheus.NewGauge(
+	requestsInProgress = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
 			Name:      "http_requests_in_progress",
 			Help:      "The current number of API HTTP requests in progress.",
-		})
+		},
+		[]string{"region", "version"},
+	)
 	requestsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
 			Namespace: namespace,
@@ -53,7 +55,7 @@ var (
 			Name:      "requests_total",
 			Help:      "Total number of requests",
 		},
-		[]string{"method", "path", "status"},
+		[]string{"method", "path", "status", "region", "version"},
 	)
 	requestErrorsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -62,7 +64,7 @@ var (
 			Name:      "request_errors_total",
 			Help:      "Total number of request errors",
 		},
-		[]string{"method", "path", "status"},
+		[]string{"method", "path", "status", "region", "version"},
 	)
 )
 
@@ -138,19 +140,81 @@ var opts = map[string]map[string]responseOpts{
 	},
 }
 
-func handleAPI(method, path string) {
-	requestsInProgress.Inc()
+// generateEndpoints creates dynamic API endpoint configurations based on numEndpoints flag
+func generateEndpoints(numEndpoints int) map[string]map[string]responseOpts {
+	endpoints := make(map[string]map[string]responseOpts)
+
+	// Keep the original endpoints for backward compatibility
+	for path, methods := range opts {
+		endpoints[path] = methods
+	}
+
+	// Generate additional endpoints
+	for i := 1; i <= numEndpoints; i++ {
+		path := fmt.Sprintf("/api/service-%d", i)
+		endpoints[path] = map[string]responseOpts{
+			"GET": {
+				baseLatency:    time.Duration(5+rand.Intn(20)) * time.Millisecond,
+				errorRatio:     0.001 + rand.Float64()*0.02,
+				outageDuration: time.Duration(10+rand.Intn(50)) * time.Second,
+			},
+			"POST": {
+				baseLatency:    time.Duration(10+rand.Intn(40)) * time.Millisecond,
+				errorRatio:     0.005 + rand.Float64()*0.03,
+				outageDuration: time.Duration(20+rand.Intn(100)) * time.Second,
+			},
+		}
+	}
+
+	return endpoints
+}
+
+// generateRegions creates region labels
+func generateRegions(numRegions int) []string {
+	regions := []string{}
+	regionNames := []string{"us-east", "us-west", "eu-west", "eu-central", "ap-southeast", "ap-northeast", "sa-east", "ca-central"}
+
+	for i := 0; i < numRegions && i < len(regionNames)*3; i++ {
+		region := fmt.Sprintf("%s-%d", regionNames[i%len(regionNames)], (i/len(regionNames))+1)
+		regions = append(regions, region)
+	}
+
+	return regions
+}
+
+// generateVersions creates version labels
+func generateVersions(numVersions int) []string {
+	versions := []string{}
+
+	for i := 0; i < numVersions; i++ {
+		version := fmt.Sprintf("v1.%d.0", i)
+		versions = append(versions, version)
+	}
+
+	return versions
+}
+
+func handleAPI(method, path, region, version string) {
+	requestsInProgress.With(prometheus.Labels{
+		"region":  region,
+		"version": version,
+	}).Inc()
 	status := http.StatusOK
 	duration := time.Millisecond
 
 	defer func() {
-		requestsInProgress.Dec()
+		requestsInProgress.With(prometheus.Labels{
+			"region":  region,
+			"version": version,
+		}).Dec()
 		requestHistogram.With(prometheus.Labels{
-			"method": method,
-			"path":   path,
-			"status": fmt.Sprint(status),
+			"method":  method,
+			"path":    path,
+			"status":  fmt.Sprint(status),
+			"region":  region,
+			"version": version,
 		}).Observe(duration.Seconds())
-		requestsTotal.WithLabelValues(method, path, fmt.Sprint(status)).Inc()
+		requestsTotal.WithLabelValues(method, path, fmt.Sprint(status), region, version).Inc()
 	}()
 
 	pathOpts, ok := opts[path]
@@ -173,6 +237,6 @@ func handleAPI(method, path string) {
 
 	if rand.Float64() <= methodOpts.errorRatio*errorFactor {
 		status = http.StatusInternalServerError
-		requestErrorsTotal.WithLabelValues(method, path, fmt.Sprint(status)).Inc()
+		requestErrorsTotal.WithLabelValues(method, path, fmt.Sprint(status), region, version).Inc()
 	}
 }

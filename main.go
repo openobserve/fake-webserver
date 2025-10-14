@@ -26,10 +26,6 @@ import (
 )
 
 var (
-	n = flag.Int(
-		"port-count", 5,
-		"Number of sequential ports to serve metrics on, starting at 8080.",
-	)
 	registerProcessMetrics = flag.Bool(
 		"enable-process-metrics", true,
 		"Include (potentially expensive) process_* metrics.",
@@ -41,6 +37,18 @@ var (
 	allowCompression = flag.Bool(
 		"allow-metrics-compression", true,
 		"Allow gzip compression of metrics.",
+	)
+	numEndpoints = flag.Int(
+		"num-endpoints", 50,
+		"Number of API endpoints to generate (e.g., /api/service-1, /api/service-2, ...).",
+	)
+	numRegions = flag.Int(
+		"num-regions", 5,
+		"Number of region labels to generate (e.g., us-east-1, us-west-1, ...).",
+	)
+	numVersions = flag.Int(
+		"num-versions", 3,
+		"Number of version labels to generate (e.g., v1.0.0, v1.1.0, ...).",
 	)
 
 	start = time.Now()
@@ -56,27 +64,25 @@ func main() {
 		registry.MustRegister(collectors.NewGoCollector())
 	}
 
-	for i := 0; i < *n; i++ {
-		mux := http.NewServeMux()
-		mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("This is a fake webserver to generate metrics data. Please use the /metrics endpoint to get the metrics data."))
-		}))
-		mux.Handle("/debug/pprof/", http.HandlerFunc(pprof.Index))
-		mux.Handle("/debug/pprof/cmdline", http.HandlerFunc(pprof.Cmdline))
-		mux.Handle("/debug/pprof/profile", http.HandlerFunc(pprof.Profile))
-		mux.Handle("/debug/pprof/symbol", http.HandlerFunc(pprof.Symbol))
-		mux.Handle("/debug/pprof/trace", http.HandlerFunc(pprof.Trace))
-		mux.Handle("/metrics", promhttp.HandlerFor(
-			registry,
-			promhttp.HandlerOpts{
-				DisableCompression: !*allowCompression,
-			},
-		))
-		go func(i int) {
-			log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", 8080+i), mux))
-		}(i)
-	}
+	mux := http.NewServeMux()
+	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("This is a fake webserver to generate metrics data. Please use the /metrics endpoint to get the metrics data."))
+	}))
+	mux.Handle("/debug/pprof/", http.HandlerFunc(pprof.Index))
+	mux.Handle("/debug/pprof/cmdline", http.HandlerFunc(pprof.Cmdline))
+	mux.Handle("/debug/pprof/profile", http.HandlerFunc(pprof.Profile))
+	mux.Handle("/debug/pprof/symbol", http.HandlerFunc(pprof.Symbol))
+	mux.Handle("/debug/pprof/trace", http.HandlerFunc(pprof.Trace))
+	mux.Handle("/metrics", promhttp.HandlerFor(
+		registry,
+		promhttp.HandlerOpts{
+			DisableCompression: !*allowCompression,
+		},
+	))
+	go func() {
+		log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", 8080), mux))
+	}()
 
 	runClient()
 }
