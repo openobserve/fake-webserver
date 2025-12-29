@@ -66,6 +66,10 @@ var (
 		},
 		[]string{"method", "path", "status", "region", "version"},
 	)
+
+	// Additional metrics to reach 2000 total metrics
+	additionalGauges   []*prometheus.GaugeVec
+	additionalCounters []*prometheus.CounterVec
 )
 
 func init() {
@@ -75,6 +79,47 @@ func init() {
 		requestHistogram,
 		requestsInProgress,
 	)
+
+	// Generate 2000 additional metrics (mix of gauges and counters)
+	// We'll create 1000 gauges and 996 counters to reach 2000 total metrics
+	for i := 0; i < 1000; i++ {
+		gauge := prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Namespace: namespace,
+				Subsystem: "metrics",
+				Name:      fmt.Sprintf("gauge_metric_%d", i),
+				Help:      fmt.Sprintf("Generated gauge metric %d", i),
+			},
+			[]string{"label"},
+		)
+		additionalGauges = append(additionalGauges, gauge)
+		registry.MustRegister(gauge)
+	}
+
+	for i := 0; i < 996; i++ {
+		counter := prometheus.NewCounterVec(
+			prometheus.CounterOpts{
+				Namespace: namespace,
+				Subsystem: "metrics",
+				Name:      fmt.Sprintf("counter_metric_%d", i),
+				Help:      fmt.Sprintf("Generated counter metric %d", i),
+			},
+			[]string{"label"},
+		)
+		additionalCounters = append(additionalCounters, counter)
+		registry.MustRegister(counter)
+	}
+}
+
+// updateAdditionalMetrics updates the generated metrics with random values
+func updateAdditionalMetrics() {
+	for _, gauge := range additionalGauges {
+		gauge.With(prometheus.Labels{"label": "value"}).Set(rand.Float64() * 100)
+	}
+
+	for _, counter := range additionalCounters {
+		counter.With(prometheus.Labels{"label": "value"}).Add(rand.Float64() * 10)
+	}
 }
 
 type responseOpts struct {

@@ -38,6 +38,15 @@ func runClient() {
 	fmt.Printf("  - %d regions\n", len(regions))
 	fmt.Printf("  - %d versions\n", len(versions))
 	fmt.Printf("  - Estimated unique time series: ~%d\n", len(endpoints)*2*len(regions)*len(versions)*3) // methods * labels * statuses
+	fmt.Printf("  - Total metrics registered: 2000\n")
+
+	// Start a goroutine to periodically update the additional metrics
+	go func() {
+		for {
+			updateAdditionalMetrics()
+			time.Sleep(5 * time.Second)
+		}
+	}()
 
 	// Generate load for each endpoint with different regions and versions
 	for path := range endpoints {
