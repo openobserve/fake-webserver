@@ -6,5 +6,8 @@ if [ -z "$VER" ]; then
     exit 1
 fi
 
-docker build -t coldstar/fake-webserver:$VER .
-docker push coldstar/fake-webserver:$VER
+docker buildx build \
+  --platform linux/amd64,linux/arm64 \
+  -t openobserve/fake-webserver:$VER \
+  --push \
+  .

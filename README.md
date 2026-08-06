@@ -63,7 +63,7 @@ Each metric includes labels: `method`, `path`, `status`, `region`, `version`
 ## Docker image
 
 ```
-coldstar/fake-webserver:v2
+openobserve/fake-webserver:v2
 ```
 
 You can simple use `kubectl apply -f deploy.yaml`

@@ -27,7 +27,8 @@ WORKDIR $GOPATH/src/app
 COPY . .
 
 RUN go mod tidy
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -o app
+ARG TARGETARCH
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} go build -o app
 
 FROM scratch
 # Import the user and group files from the builder.

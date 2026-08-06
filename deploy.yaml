@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: fake-webserver
-          image: coldstar/fake-webserver:v2
+          image: openobserve/fake-webserver:v2
           ports:
             - containerPort: 8080
           resources:
