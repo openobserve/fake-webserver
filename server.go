@@ -18,6 +18,7 @@ import (
 	"math/rand"
 	"net/http"
 	_ "net/http/pprof"
+	"os"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -37,7 +38,7 @@ var (
 			Help:      "A histogram of the API HTTP request durations in seconds.",
 			Buckets:   prometheus.ExponentialBuckets(0.0001, 1.5, 25),
 		},
-		[]string{"method", "path", "status", "region", "version"},
+		[]string{"method", "path", "status", "region", "version", "node"},
 	)
 	requestsInProgress = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
@@ -46,7 +47,7 @@ var (
 			Name:      "http_requests_in_progress",
 			Help:      "The current number of API HTTP requests in progress.",
 		},
-		[]string{"region", "version"},
+		[]string{"region", "version", "node"},
 	)
 	requestsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -55,7 +56,7 @@ var (
 			Name:      "requests_total",
 			Help:      "Total number of requests",
 		},
-		[]string{"method", "path", "status", "region", "version"},
+		[]string{"method", "path", "status", "region", "version", "node"},
 	)
 	requestErrorsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -64,7 +65,7 @@ var (
 			Name:      "request_errors_total",
 			Help:      "Total number of request errors",
 		},
-		[]string{"method", "path", "status", "region", "version"},
+		[]string{"method", "path", "status", "region", "version", "node"},
 	)
 )
 
@@ -194,10 +195,30 @@ func generateVersions(numVersions int) []string {
 	return versions
 }
 
-func handleAPI(method, path, region, version string) {
+// generateNodes creates node labels from this host's name.
+// With numNodes == 1, the label is the hostname as-is.
+// With numNodes > 1, simulated names are derived from the hostname (e.g. host-1, host-2).
+func generateNodes(numNodes int) []string {
+	hostname, err := os.Hostname()
+	if err != nil || hostname == "" {
+		hostname = "unknown"
+	}
+	if numNodes <= 1 {
+		return []string{hostname}
+	}
+
+	nodes := make([]string, numNodes)
+	for i := 0; i < numNodes; i++ {
+		nodes[i] = fmt.Sprintf("%s-%d", hostname, i+1)
+	}
+	return nodes
+}
+
+func handleAPI(method, path, region, version, node string) {
 	requestsInProgress.With(prometheus.Labels{
 		"region":  region,
 		"version": version,
+		"node":    node,
 	}).Inc()
 	status := http.StatusOK
 	duration := time.Millisecond
@@ -206,6 +227,7 @@ func handleAPI(method, path, region, version string) {
 		requestsInProgress.With(prometheus.Labels{
 			"region":  region,
 			"version": version,
+			"node":    node,
 		}).Dec()
 		requestHistogram.With(prometheus.Labels{
 			"method":  method,
@@ -213,8 +235,9 @@ func handleAPI(method, path, region, version string) {
 			"status":  fmt.Sprint(status),
 			"region":  region,
 			"version": version,
+			"node":    node,
 		}).Observe(duration.Seconds())
-		requestsTotal.WithLabelValues(method, path, fmt.Sprint(status), region, version).Inc()
+		requestsTotal.WithLabelValues(method, path, fmt.Sprint(status), region, version, node).Inc()
 	}()
 
 	pathOpts, ok := opts[path]
@@ -237,6 +260,6 @@ func handleAPI(method, path, region, version string) {
 
 	if rand.Float64() <= methodOpts.errorRatio*errorFactor {
 		status = http.StatusInternalServerError
-		requestErrorsTotal.WithLabelValues(method, path, fmt.Sprint(status), region, version).Inc()
+		requestErrorsTotal.WithLabelValues(method, path, fmt.Sprint(status), region, version, node).Inc()
 	}
 }

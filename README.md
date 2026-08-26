@@ -5,7 +5,8 @@ It's a Fake Webserver to generate metrics data for Prometheus load testing.
 ## Features
 
 - Generates configurable number of API endpoints
-- Creates multiple label combinations (regions, versions) for high cardinality testing
+- Creates multiple label combinations (regions, versions, nodes) for high cardinality testing
+- Simulates multiple nodes from a single process via `-num-nodes`
 - Simulates realistic traffic patterns with oscillating request rates
 - Includes error simulation and periodic outages
 - Exports Prometheus metrics at `/metrics` endpoint
@@ -24,6 +25,10 @@ Flags:
         Number of region labels to generate (default 5)
   -num-versions int
         Number of version labels to generate (default 3)
+  -num-nodes int
+        Number of node labels to generate (default 1).
+        1 uses this host's node name; >1 simulates names based on it
+        (e.g. hostname-1, hostname-2, ...)
   -oscillation-period duration
         Duration of rate oscillation period (default 5m)
   -enable-process-metrics
@@ -46,6 +51,11 @@ Flags:
 ./fake-webserver -num-endpoints=100 -num-regions=10 -num-versions=5
 ```
 
+**Simulate 10 nodes on one process** (~48,600 time series):
+```bash
+./fake-webserver -num-nodes=10
+```
+
 **Extreme load test** (~156,000 time series):
 ```bash
 ./fake-webserver -num-endpoints=500 -num-regions=10 -num-versions=5
@@ -58,12 +68,12 @@ Flags:
 - `codelab_api_requests_total` - Counter of total requests
 - `codelab_api_request_errors_total` - Counter of failed requests
 
-Each metric includes labels: `method`, `path`, `status`, `region`, `version`
+Each metric includes labels: `method`, `path`, `status`, `region`, `version`, `node`
 
 ## Docker image
 
 ```
-openobserve/fake-webserver:v2
+openobserve/fake-webserver:v3
 ```
 
 You can simple use `kubectl apply -f deploy.yaml`

@@ -50,6 +50,10 @@ var (
 		"num-versions", 3,
 		"Number of version labels to generate (e.g., v1.0.0, v1.1.0, ...).",
 	)
+	numNodes = flag.Int(
+		"num-nodes", 1,
+		"Number of node labels to generate. 1 uses this host's node name; >1 simulates names based on it.",
+	)
 
 	start = time.Now()
 )

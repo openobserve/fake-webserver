@@ -28,18 +28,20 @@ func runClient() {
 		return 2 + math.Sin(math.Sin(2*math.Pi*float64(time.Since(start))/float64(*oscillationPeriod)))
 	}
 
-	// Generate dynamic endpoints, regions, and versions
+	// Generate dynamic endpoints, regions, versions, and nodes
 	endpoints := generateEndpoints(*numEndpoints)
 	regions := generateRegions(*numRegions)
 	versions := generateVersions(*numVersions)
+	nodes := generateNodes(*numNodes)
 
 	fmt.Printf("Starting load generation with:\n")
 	fmt.Printf("  - %d API endpoints\n", len(endpoints))
 	fmt.Printf("  - %d regions\n", len(regions))
 	fmt.Printf("  - %d versions\n", len(versions))
-	fmt.Printf("  - Estimated unique time series: ~%d\n", len(endpoints)*2*len(regions)*len(versions)*3) // methods * labels * statuses
+	fmt.Printf("  - %d nodes\n", len(nodes))
+	fmt.Printf("  - Estimated unique time series: ~%d\n", len(endpoints)*2*len(regions)*len(versions)*len(nodes)*3) // methods * labels * statuses
 
-	// Generate load for each endpoint with different regions and versions
+	// Generate load for each endpoint with different regions, versions, and nodes
 	for path := range endpoints {
 		for _, method := range []string{"GET", "POST"} {
 			// Create a copy for the closure
@@ -48,11 +50,12 @@ func runClient() {
 
 			go func() {
 				for {
-					// Randomly select region and version to create diverse series
+					// Randomly select region, version, and node to create diverse series
 					region := regions[rand.Intn(len(regions))]
 					version := versions[rand.Intn(len(versions))]
+					node := nodes[rand.Intn(len(nodes))]
 
-					handleAPI(currentMethod, currentPath, region, version)
+					handleAPI(currentMethod, currentPath, region, version, node)
 
 					// Variable sleep time based on oscillation
 					sleepTime := time.Duration(float64(5+rand.Intn(50)) * oscillationFactor())
