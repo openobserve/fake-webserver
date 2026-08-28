@@ -30,13 +30,15 @@ var (
 	namespace = "codelab"
 	subsystem = "api"
 
+	requestDurationBuckets = prometheus.ExponentialBuckets(0.0001, 1.5, 25)
+
 	requestHistogram = prometheus.NewHistogramVec(
 		prometheus.HistogramOpts{
 			Namespace: namespace,
 			Subsystem: subsystem,
 			Name:      "request_duration_seconds",
 			Help:      "A histogram of the API HTTP request durations in seconds.",
-			Buckets:   prometheus.ExponentialBuckets(0.0001, 1.5, 25),
+			Buckets:   requestDurationBuckets,
 		},
 		[]string{"method", "path", "status", "region", "version", "node"},
 	)
@@ -90,6 +92,12 @@ type responseOpts struct {
 	outageDuration time.Duration
 }
 
+// apiEndpoints is the table handleAPI serves from. It is built by
+// generateEndpoints at start-up, before any load goroutine runs, and holds the
+// seed endpoints in opts plus every generated /api/service-N one.
+var apiEndpoints map[string]map[string]responseOpts
+
+// opts seeds apiEndpoints with the original hand-tuned endpoints.
 var opts = map[string]map[string]responseOpts{
 	"/api/foo": {
 		"GET": {
@@ -214,6 +222,12 @@ func generateNodes(numNodes int) []string {
 	return nodes
 }
 
+// statusesPerEndpoint is how many distinct status labels a served (path,
+// method) pair produces: 200 normally and 500 once its error ratio fires.
+// handleAPI can also report 404 and 405, but the generated load only drives
+// paths and methods that exist in apiEndpoints, so those never show up.
+const statusesPerEndpoint = 2
+
 func handleAPI(method, path, region, version, node string) {
 	requestsInProgress.With(prometheus.Labels{
 		"region":  region,
@@ -240,7 +254,7 @@ func handleAPI(method, path, region, version, node string) {
 		requestsTotal.WithLabelValues(method, path, fmt.Sprint(status), region, version, node).Inc()
 	}()
 
-	pathOpts, ok := opts[path]
+	pathOpts, ok := apiEndpoints[path]
 	if !ok {
 		status = http.StatusNotFound
 		return
