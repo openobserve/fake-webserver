@@ -5,7 +5,7 @@ It's a Fake Webserver to generate metrics data for Prometheus load testing.
 ## Features
 
 - Generates configurable number of API endpoints
-- Creates multiple label combinations (regions, versions, nodes) for high cardinality testing
+- Creates multiple label combinations (regions, versions, virtual nodes) for high cardinality testing
 - Simulates multiple nodes from a single process via `-num-nodes`
 - Simulates realistic traffic patterns with oscillating request rates
 - Includes error simulation and periodic outages
@@ -68,12 +68,12 @@ Flags:
 - `codelab_api_requests_total` - Counter of total requests
 - `codelab_api_request_errors_total` - Counter of failed requests
 
-Each metric includes labels: `method`, `path`, `status`, `region`, `version`, `node`
+Each metric includes labels: `method`, `path`, `status`, `region`, `version`, `vnode`
 
 ## Docker image
 
 ```
-openobserve/fake-webserver:v3
+openobserve/fake-webserver:v4
 ```
 
 You can simple use `kubectl apply -f deploy.yaml`

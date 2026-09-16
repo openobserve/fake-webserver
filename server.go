@@ -40,7 +40,7 @@ var (
 			Help:      "A histogram of the API HTTP request durations in seconds.",
 			Buckets:   requestDurationBuckets,
 		},
-		[]string{"method", "path", "status", "region", "version", "node"},
+		[]string{"method", "path", "status", "region", "version", "vnode"},
 	)
 	requestsInProgress = prometheus.NewGaugeVec(
 		prometheus.GaugeOpts{
@@ -49,7 +49,7 @@ var (
 			Name:      "http_requests_in_progress",
 			Help:      "The current number of API HTTP requests in progress.",
 		},
-		[]string{"region", "version", "node"},
+		[]string{"region", "version", "vnode"},
 	)
 	requestsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -58,7 +58,7 @@ var (
 			Name:      "requests_total",
 			Help:      "Total number of requests",
 		},
-		[]string{"method", "path", "status", "region", "version", "node"},
+		[]string{"method", "path", "status", "region", "version", "vnode"},
 	)
 	requestErrorsTotal = prometheus.NewCounterVec(
 		prometheus.CounterOpts{
@@ -67,7 +67,7 @@ var (
 			Name:      "request_errors_total",
 			Help:      "Total number of request errors",
 		},
-		[]string{"method", "path", "status", "region", "version", "node"},
+		[]string{"method", "path", "status", "region", "version", "vnode"},
 	)
 )
 
@@ -232,7 +232,7 @@ func handleAPI(method, path, region, version, node string) {
 	requestsInProgress.With(prometheus.Labels{
 		"region":  region,
 		"version": version,
-		"node":    node,
+		"vnode":   node,
 	}).Inc()
 	status := http.StatusOK
 	duration := time.Millisecond
@@ -241,7 +241,7 @@ func handleAPI(method, path, region, version, node string) {
 		requestsInProgress.With(prometheus.Labels{
 			"region":  region,
 			"version": version,
-			"node":    node,
+			"vnode":   node,
 		}).Dec()
 		requestHistogram.With(prometheus.Labels{
 			"method":  method,
@@ -249,7 +249,7 @@ func handleAPI(method, path, region, version, node string) {
 			"status":  fmt.Sprint(status),
 			"region":  region,
 			"version": version,
-			"node":    node,
+			"vnode":   node,
 		}).Observe(duration.Seconds())
 		requestsTotal.WithLabelValues(method, path, fmt.Sprint(status), region, version, node).Inc()
 	}()
