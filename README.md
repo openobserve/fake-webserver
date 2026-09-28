@@ -61,6 +61,57 @@ Flags:
 ./fake-webserver -num-endpoints=500 -num-regions=10 -num-versions=5
 ```
 
+### Backfill mode
+
+Setting `-backfill-start` runs a one-shot CLI instead of the web server: it
+generates hours of the same load in virtual time and writes it straight to one
+or more Prometheus remote-write endpoints, as fast as they accept it, then
+exits.
+
+```bash
+./fake-webserver -num-nodes=14 -node-name=fake-webserver \
+  -backfill-start=2026-09-28T00:00:00Z -backfill-step=15s -backfill-hours=6 \
+  -backfill-labels=job=fake-webserver,namespace=perf-fakeserver \
+  -remote-write=http://vm:8428/api/v1/write \
+  -remote-write='http://root%40example.com:Complexpass%23123@o2:5080/api/default/prometheus/api/v1/write'
+```
+
+Backfill flags:
+
+```
+  -backfill-start string      RFC3339 time of the first point; enables backfill mode
+  -backfill-step duration     interval between points (default 15s)
+  -backfill-hours float       hours of data, starting at -backfill-start (default 6)
+  -remote-write url           remote-write target; repeat for several. Basic auth goes
+                              in the URL, percent-encoded. None = generate and count only
+  -backfill-labels k=v,...    constant labels added to every series (e.g. job, instance)
+  -backfill-seed int          RNG seed; same seed and flags = identical data (default 1)
+  -backfill-batch-size int    samples per request (default 10000, vmagent's default)
+  -backfill-senders int       concurrent requests per target (default 4)
+  -backfill-encoders int      encoding goroutines (default GOMAXPROCS)
+  -node-name string           base name for the vnode label (default: hostname)
+```
+
+How it relates to the live server:
+
+- **Same traffic.** It runs the live server's load as a discrete-event
+  simulation -- the same 108 (path, method) workers, request outcomes, pauses,
+  oscillation and outage schedule -- on a virtual clock and one seeded RNG.
+- **Exact timestamps.** Point *k* is stamped `start + k*step` and every series
+  shares that timestamp, like a scraper with aligned timestamps (vmagent). Each
+  point holds the state after all requests up to that instant. The simulated
+  load starts one step before `start`, so a run of H hours covers
+  `[start, start+H)` with `H*3600/step` points per series.
+- **Identical data on every target.** Each batch is generated once and sent to
+  every target byte for byte. A slow target applies backpressure instead of
+  dropping data, so the run proceeds at the pace of the slowest target.
+- **Failure handling.** 429, 5xx and network errors are retried with backoff;
+  any other 4xx aborts the run, since skipping a batch would leave a silent hole.
+  The run exits non-zero if any target's sample count differs from what was
+  generated.
+- **Not included:** `go_*`/`process_*` metrics, and the `up`/`scrape_*` series a
+  scraper adds.
+
 ## Metrics Generated
 
 - `codelab_api_request_duration_seconds` - Histogram of request durations (with buckets)
@@ -73,7 +124,7 @@ Each metric includes labels: `method`, `path`, `status`, `region`, `version`, `v
 ## Docker image
 
 ```
-openobserve/fake-webserver:v4
+openobserve/fake-webserver:v5
 ```
 
 You can simple use `kubectl apply -f deploy.yaml`

@@ -17,7 +17,7 @@ spec:
     spec:
       containers:
         - name: fake-webserver
-          image: openobserve/fake-webserver:v4
+          image: openobserve/fake-webserver:v5
           ports:
             - containerPort: 8080
           resources:

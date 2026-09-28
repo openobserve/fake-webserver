@@ -150,7 +150,7 @@ var opts = map[string]map[string]responseOpts{
 }
 
 // generateEndpoints creates dynamic API endpoint configurations based on numEndpoints flag
-func generateEndpoints(numEndpoints int) map[string]map[string]responseOpts {
+func generateEndpoints(numEndpoints int, rand randSource) map[string]map[string]responseOpts {
 	endpoints := make(map[string]map[string]responseOpts)
 
 	// Keep the original endpoints for backward compatibility
@@ -207,9 +207,13 @@ func generateVersions(numVersions int) []string {
 // With numNodes == 1, the label is the hostname as-is.
 // With numNodes > 1, simulated names are derived from the hostname (e.g. host-1, host-2).
 func generateNodes(numNodes int) []string {
-	hostname, err := os.Hostname()
-	if err != nil || hostname == "" {
-		hostname = "unknown"
+	hostname := *nodeName
+	if hostname == "" {
+		h, err := os.Hostname()
+		if err != nil || h == "" {
+			h = "unknown"
+		}
+		hostname = h
 	}
 	if numNodes <= 1 {
 		return []string{hostname}
@@ -228,52 +232,74 @@ func generateNodes(numNodes int) []string {
 // paths and methods that exist in apiEndpoints, so those never show up.
 const statusesPerEndpoint = 2
 
+// randSource is the randomness the load draws from. The live server passes the
+// package-level math/rand functions (safe for its concurrent goroutines); the
+// backfill passes one seeded *rand.Rand so that a run is reproducible.
+type randSource interface {
+	Intn(n int) int
+	Float64() float64
+	NormFloat64() float64
+}
+
+// globalRand forwards to the package-level math/rand functions.
+type globalRand struct{}
+
+func (globalRand) Intn(n int) int       { return rand.Intn(n) }
+func (globalRand) Float64() float64     { return rand.Float64() }
+func (globalRand) NormFloat64() float64 { return rand.NormFloat64() }
+
+// simulateRequest decides the outcome of one request made `elapsed` after the
+// load started: its status and how long it took. The live server and the
+// backfill both call it, so they generate the same traffic; only the clock
+// differs (wall time vs virtual time).
+func simulateRequest(method, path string, elapsed time.Duration, r randSource) (status int, duration time.Duration) {
+	pathOpts, ok := apiEndpoints[path]
+	if !ok {
+		return http.StatusNotFound, time.Millisecond
+	}
+	methodOpts, ok := pathOpts[method]
+	if !ok {
+		return http.StatusMethodNotAllowed, time.Millisecond
+	}
+	latencyFactor := time.Duration(1)
+	errorFactor := 1.
+	if elapsed%(10*methodOpts.outageDuration) < methodOpts.outageDuration {
+		latencyFactor *= 3
+		errorFactor *= 10
+	}
+	duration = (methodOpts.baseLatency + time.Duration(r.NormFloat64()*float64(methodOpts.baseLatency)/10)) * latencyFactor
+
+	status = http.StatusOK
+	if r.Float64() <= methodOpts.errorRatio*errorFactor {
+		status = http.StatusInternalServerError
+	}
+	return status, duration
+}
+
 func handleAPI(method, path, region, version, node string) {
 	requestsInProgress.With(prometheus.Labels{
 		"region":  region,
 		"version": version,
 		"vnode":   node,
 	}).Inc()
-	status := http.StatusOK
-	duration := time.Millisecond
 
-	defer func() {
-		requestsInProgress.With(prometheus.Labels{
-			"region":  region,
-			"version": version,
-			"vnode":   node,
-		}).Dec()
-		requestHistogram.With(prometheus.Labels{
-			"method":  method,
-			"path":    path,
-			"status":  fmt.Sprint(status),
-			"region":  region,
-			"version": version,
-			"vnode":   node,
-		}).Observe(duration.Seconds())
-		requestsTotal.WithLabelValues(method, path, fmt.Sprint(status), region, version, node).Inc()
-	}()
-
-	pathOpts, ok := apiEndpoints[path]
-	if !ok {
-		status = http.StatusNotFound
-		return
-	}
-	methodOpts, ok := pathOpts[method]
-	if !ok {
-		status = http.StatusMethodNotAllowed
-		return
-	}
-	latencyFactor := time.Duration(1)
-	errorFactor := 1.
-	if time.Since(start)%(10*methodOpts.outageDuration) < methodOpts.outageDuration {
-		latencyFactor *= 3
-		errorFactor *= 10
-	}
-	duration = (methodOpts.baseLatency + time.Duration(rand.NormFloat64()*float64(methodOpts.baseLatency)/10)) * latencyFactor
-
-	if rand.Float64() <= methodOpts.errorRatio*errorFactor {
-		status = http.StatusInternalServerError
+	status, duration := simulateRequest(method, path, time.Since(start), globalRand{})
+	if status == http.StatusInternalServerError {
 		requestErrorsTotal.WithLabelValues(method, path, fmt.Sprint(status), region, version, node).Inc()
 	}
+
+	requestsInProgress.With(prometheus.Labels{
+		"region":  region,
+		"version": version,
+		"vnode":   node,
+	}).Dec()
+	requestHistogram.With(prometheus.Labels{
+		"method":  method,
+		"path":    path,
+		"status":  fmt.Sprint(status),
+		"region":  region,
+		"version": version,
+		"vnode":   node,
+	}).Observe(duration.Seconds())
+	requestsTotal.WithLabelValues(method, path, fmt.Sprint(status), region, version, node).Inc()
 }

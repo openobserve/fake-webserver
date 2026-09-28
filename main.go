@@ -54,12 +54,24 @@ var (
 		"num-nodes", 1,
 		"Number of node labels to generate. 1 uses this host's node name; >1 simulates names based on it.",
 	)
+	nodeName = flag.String(
+		"node-name", "",
+		"Base name for the vnode label (default: this host's name).",
+	)
 
 	start = time.Now()
 )
 
 func main() {
 	flag.Parse()
+
+	// Backfill is a one-shot CLI: no web server, exits when every point is written.
+	if *backfillStart != "" {
+		if err := runBackfill(); err != nil {
+			log.Fatalf("backfill: %v", err)
+		}
+		return
+	}
 
 	if *registerProcessMetrics {
 		registry.MustRegister(collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}))
