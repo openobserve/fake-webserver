@@ -28,14 +28,23 @@ var oscillationPeriod = flag.Duration("oscillation-period", 5*time.Minute, "The 
 // httpMethods are the methods each endpoint is driven with.
 var httpMethods = []string{"GET", "POST"}
 
-func runClient() {
-	oscillationFactor := func() float64 {
-		return 2 + math.Sin(math.Sin(2*math.Pi*float64(time.Since(start))/float64(*oscillationPeriod)))
-	}
+// oscillationFactor scales the pause between requests, `elapsed` after the load
+// started: between 1 and 3, cycling once per -oscillation-period.
+func oscillationFactor(elapsed time.Duration) float64 {
+	return 2 + math.Sin(math.Sin(2*math.Pi*float64(elapsed)/float64(*oscillationPeriod)))
+}
 
+// pauseAfterRequest is how long a load goroutine waits before its next request.
+// Note the truncation to whole milliseconds before scaling: kept exactly as the
+// live server has always done it, so backfilled data has the same request rate.
+func pauseAfterRequest(elapsed time.Duration, r randSource) time.Duration {
+	return time.Duration(float64(5+r.Intn(50))*oscillationFactor(elapsed)) * time.Millisecond
+}
+
+func runClient() {
 	// Generate dynamic endpoints, regions, versions, and nodes. handleAPI
 	// serves from apiEndpoints, so it has to be set before any load starts.
-	apiEndpoints = generateEndpoints(*numEndpoints)
+	apiEndpoints = generateEndpoints(*numEndpoints, globalRand{})
 	endpoints := apiEndpoints
 	regions := generateRegions(*numRegions)
 	versions := generateVersions(*numVersions)
@@ -60,8 +69,7 @@ func runClient() {
 					handleAPI(currentMethod, currentPath, region, version, node)
 
 					// Variable sleep time based on oscillation
-					sleepTime := time.Duration(float64(5+rand.Intn(50)) * oscillationFactor())
-					time.Sleep(sleepTime * time.Millisecond)
+					time.Sleep(pauseAfterRequest(time.Since(start), globalRand{}))
 				}
 			}()
 		}
